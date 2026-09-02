@@ -57,19 +57,19 @@ jobs:
       - name: Tag the Release Commit and Update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           FINAL_TAG="${{ steps.vars.outputs.final_tag }}"
-          RELEASE_ID="${{ steps.vars.outputs.release_id }}"
           RAW_TAG="${{ github.event.release.tag_name }}"
 
-          # 1. Create the new tag on HEAD (the commit that changed the POM)
+          # 1. Create and push the new final tag on the bumped commit
           git tag -a "$FINAL_TAG" -m "Release $FINAL_TAG"
           git push origin "$FINAL_TAG"
 
-          # 2. Tell the GitHub Release to point to the new tag
-          gh release edit "$RELEASE_ID" --tag "$FINAL_TAG"
+          # 2. Re-point the GitHub release from the old tag to the new tag
+          gh release edit "$RAW_TAG" --tag "$FINAL_TAG"
 
-          # 3. Clean up the temporary tag
+          # 3. Clean up the temporary git tag
           if [[ "$RAW_TAG" == *"-tmp"* ]]; then
             git push origin --delete "$RAW_TAG"
           fi
