@@ -1,0 +1,75 @@
+name: Test Release Tagging
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  retag-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse Release Tag & Target Version
+        id: vars
+        run: |
+          RAW_TAG="${{ github.event.release.tag_name }}"
+          echo "Initial tag created by release: $RAW_TAG"
+
+          # Strip '-tmp' from the end
+          FINAL_TAG="${RAW_TAG%-tmp}"
+
+          # Strip leading 'v' for the Maven version
+          MAVEN_VERSION="${FINAL_TAG#v}"
+
+          echo "Target tag: $FINAL_TAG"
+          echo "Target Maven version: $MAVEN_VERSION"
+
+          echo "final_tag=$FINAL_TAG" >> "$GITHUB_OUTPUT"
+          echo "maven_version=$MAVEN_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_id=${{ github.event.release.id }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Update POM to Release Version
+        run: |
+          mvn versions:set -DnewVersion="${{ steps.vars.outputs.maven_version }}" -DgenerateBackupPoms=false
+
+      - name: Commit and Push Version Bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release ${{ steps.vars.outputs.final_tag }}"
+          git push origin HEAD:${{ github.event.repository.default_branch }}
+
+      - name: Tag the Release Commit and Update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FINAL_TAG="${{ steps.vars.outputs.final_tag }}"
+          RELEASE_ID="${{ steps.vars.outputs.release_id }}"
+          RAW_TAG="${{ github.event.release.tag_name }}"
+
+          # 1. Create the new tag on HEAD (the commit that changed the POM)
+          git tag -a "$FINAL_TAG" -m "Release $FINAL_TAG"
+          git push origin "$FINAL_TAG"
+
+          # 2. Tell the GitHub Release to point to the new tag
+          gh release edit "$RELEASE_ID" --tag "$FINAL_TAG"
+
+          # 3. Clean up the temporary tag
+          if [[ "$RAW_TAG" == *"-tmp"* ]]; then
+            git push origin --delete "$RAW_TAG"
+          fi
