@@ -35,7 +35,6 @@ jobs:
 
           echo "final_tag=$FINAL_TAG" >> "$GITHUB_OUTPUT"
           echo "maven_version=$MAVEN_VERSION" >> "$GITHUB_OUTPUT"
-          echo "release_id=${{ github.event.release.id }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -59,7 +58,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           FINAL_TAG="${{ steps.vars.outputs.final_tag }}"
-          RELEASE_ID="${{ steps.vars.outputs.release_id }}"
           RAW_TAG="${{ github.event.release.tag_name }}"
 
           # 1. Create the new tag on HEAD (the commit that changed the POM)
@@ -67,7 +65,7 @@ jobs:
           git push origin "$FINAL_TAG"
 
           # 2. Tell the GitHub Release to point to the new tag
-          gh release edit "$RELEASE_ID" --tag "$FINAL_TAG"
+          gh release edit "$RAW_TAG" --tag "$FINAL_TAG"
 
           # 3. Clean up the temporary tag
           if [[ "$RAW_TAG" == *"-tmp"* ]]; then
